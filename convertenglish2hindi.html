@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>English → Hindi Translator</title>
+
+  <!-- Bootstrap 5 + Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --card-max: 600px;
+    }
+    body{
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      background: linear-gradient(135deg,#76e7d9,#a7b8ff);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+    }
+    .card.translator{
+      width: min(92vw, var(--card-max));
+      border: 0;
+      border-radius: 20px;
+      box-shadow: 0 18px 45px rgba(0,0,0,.15);
+    }
+    .brand{
+      display:flex; gap:.6rem; align-items:center;
+    }
+    .brand i{ font-size:1.4rem; }
+    textarea.form-control{
+      resize: vertical;
+      min-height: 56px;
+      font-size: 1.05rem;
+      line-height: 1.4;
+    }
+    .hindi-font{
+      font-family: "Mangal","Noto Sans Devanagari","Hind","Poppins",sans-serif;
+      font-weight: 600;
+    }
+    .muted{
+      opacity:.8
+    }
+    @media (prefers-color-scheme: dark){
+      body{ background: radial-gradient(circle at 20% 10%, #1b2a3a, #0f172a 60%); }
+      .card.translator{ background:#0b1220; color:#e6edf6; box-shadow:0 18px 45px rgba(0,0,0,.55) }
+      .form-text{ color:#9fb3c8 !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card translator p-4 p-md-5">
+    <div class="brand mb-3">
+      <i class="bi bi-globe2 text-primary"></i>
+      <h3 class="m-0">English → Hindi Translator</h3>
+    </div>
+
+    <!-- English Input -->
+    <label for="txtEnglish" class="form-label fw-semibold">Type in English</label>
+    <div class="input-group mb-3">
+      <textarea id="txtEnglish" class="form-control" placeholder="Start typing…" aria-label="English text"></textarea>
+      <button class="btn btn-outline-secondary" id="btnClear" title="Clear">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <!-- Hindi Output -->
+    <label for="txtHindi" class="form-label fw-semibold">हिंदी परिणाम</label>
+    <div class="input-group mb-2">
+      <textarea id="txtHindi" class="form-control hindi-font" placeholder="हिंदी आउटपुट यहाँ दिखाई देगा" aria-label="Hindi output" readonly></textarea>
+      <button class="btn btn-outline-primary" id="btnCopy" title="Copy">
+        <span class="spinner-border spinner-border-sm me-1 d-none" id="spinCopy" role="status" aria-hidden="true"></span>
+        <i class="bi bi-clipboard"></i>
+      </button>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center">
+      <small id="status" class="form-text text-muted muted">Real-time translation • Google Translate (unofficial endpoint)</small>
+      <small id="charCount" class="text-muted"></small>
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const eng = document.getElementById('txtEnglish');
+    const hin = document.getElementById('txtHindi');
+    const btnCopy = document.getElementById('btnCopy');
+    const btnClear = document.getElementById('btnClear');
+    const statusEl = document.getElementById('status');
+    const spinCopy = document.getElementById('spinCopy');
+    const charCount = document.getElementById('charCount');
+
+    // Debounce helper
+    function debounce(fn, delay = 350){
+      let t; 
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+    }
+
+    // Translate
+    async function translateNow(text){
+      if(!text.trim()){ hin.value=''; statusEl.textContent='Idle'; return; }
+      statusEl.textContent='Translating…';
+      try{
+        const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=" + encodeURIComponent(text);
+        const res = await fetch(url);
+        const data = await res.json();
+        // Assemble full text (handles multi-chunk responses)
+        const chunks = (data?.[0] ?? []).map(x => x?.[0] ?? "");
+        hin.value = chunks.join("");
+        statusEl.textContent='Done';
+      }catch(err){
+        hin.value = "⚠️ Translation error";
+        statusEl.textContent='Network/Service error';
+      }
+    }
+    const translateDebounced = debounce(translateNow, 400);
+
+    // Live typing
+    eng.addEventListener('input', (e)=>{
+      charCount.textContent = `${e.target.value.length} chars`;
+      translateDebounced(e.target.value);
+    });
+
+    // Copy Hindi
+    btnCopy.addEventListener('click', async ()=>{
+      if(!hin.value) return;
+      try{
+        spinCopy.classList.remove('d-none');
+        await navigator.clipboard.writeText(hin.value);
+        btnCopy.innerHTML = '<i class="bi bi-clipboard-check"></i>';
+        setTimeout(()=> btnCopy.innerHTML = '<span class="spinner-border spinner-border-sm me-1 d-none" id="spinCopy" role="status" aria-hidden="true"></span><i class="bi bi-clipboard"></i>', 1200);
+      }catch{
+        // Fallback
+        hin.select(); document.execCommand('copy');
+      }finally{
+        spinCopy.classList.add('d-none');
+      }
+    });
+
+    // Clear
+    btnClear.addEventListener('click', ()=>{
+      eng.value=''; hin.value=''; statusEl.textContent='Cleared'; charCount.textContent='';
+      eng.focus();
+    });
+
+    // Autofocus on desktop, avoid popping kb on mobile
+    if (window.matchMedia('(pointer:fine)').matches) eng.focus();
+  </script>
+
+</body>
+</html>
